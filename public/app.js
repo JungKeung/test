@@ -62,7 +62,7 @@ function renderMissingParam() {
   missionTitleEl.textContent = '⚠️ 스트리머를 지정해주세요';
   rankingListEl.innerHTML = '';
   emptyMessageEl.hidden = false;
-  emptyMessageEl.textContent = '주소 끝에 ?bj=아이디 또는 ?nick=닉네임을 추가해주세요. broadcast.html?bj=아이디&goal=목표치숫자( 예 : 300000)';
+  emptyMessageEl.textContent = '주소 끝에 ?bj=아이디&goal=목표치을 추가해주세요. broadcast.html?bj=아이디&goal=목표치숫자( 예 : 300000)';
   progressCardEl.hidden = true;
 }
 
