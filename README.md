@@ -6,6 +6,8 @@ SOOP 도전미션을 진행 중인 **아무 스트리머나** 주소창의 `?bj=
 - 스트리머 계정 로그인도 필요 없습니다.
 - 특정 스트리머로 고정되어 있지 않습니다. 같은 서버 하나로 스트리머마다 다른 주소를 나눠주면 됩니다.
 - SQLite/DB, 테스트 후원, 초기화, 운영자 로그인 같은 기능은 이전 버전에서 모두 제거했습니다. (이전 버전들은 `backup/` 폴더에 그대로 보관되어 있습니다)
+- 화면에는 **목표 진행률 카드**(반투명 글래스 스타일)와 **TOP5 순위표**, 이 두 영역만 있습니다. 진행 중 미션 개수/별도의 총 별풍선/마지막 갱신 시각은 표시하지 않습니다.
+- 목표 별풍선 개수는 스트리머마다 다를 수 있어서 `?goal=` 파라미터로 받습니다. (없거나 숫자가 아니거나 0 이하면 기본값 300,000) 목표를 달성하면 바가 초록색으로 바뀌고 "🎉 N개 목표 달성!" 문구로 바뀝니다.
 
 ---
 
@@ -38,12 +40,14 @@ npm start
 브라우저에서 아래처럼 접속하면 그 스트리머의 TOP5 화면이 보입니다.
 
 ```
-http://localhost:3000/broadcast.html?bj=whiteone325
+http://localhost:3000/broadcast.html?bj=whiteone325&goal=300000
+http://localhost:3000/broadcast.html?bj=katollia&goal=500000
 http://localhost:3000/broadcast.html?nick=닉네임
 ```
 
 - `bj` = SoopScope/SOOP의 **아이디(bjId)** 로 찾습니다. (예시의 `whiteone325` 같은 영문 아이디)
 - `nick` = **닉네임(bjNick)** 으로 찾습니다. `bj`와 `nick`을 둘 다 넣으면 `bj`가 우선됩니다.
+- `goal` = 목표 별풍선 개수입니다. 생략하거나 숫자가 아니거나 0 이하면 기본값 300,000이 적용됩니다.
 - 파라미터를 아예 안 넣으면 화면에 "스트리머를 지정해주세요" 안내가 뜹니다.
 
 ---
@@ -100,13 +104,13 @@ soop-challenge-leaderboard/
 1. OBS에서 **소스 추가 → 브라우저** 선택
 2. URL에 아래처럼 넣습니다.
    ```
-   https://도메인/broadcast.html?bj=whiteone325
+   https://도메인/broadcast.html?bj=whiteone325&goal=300000
    ```
    (로컬 테스트라면 `https://도메인` 대신 `http://localhost:3000`)
-3. 스트리머가 여러 명이면, **소스마다 `bj` 값만 바꿔서** 여러 개 추가하면 됩니다. 서버는 하나만 켜둬도 됩니다.
+3. 스트리머가 여러 명이면, **소스마다 `bj`와 `goal` 값만 바꿔서** 여러 개 추가하면 됩니다. 서버는 하나만 켜둬도 됩니다.
    ```
-   https://도메인/broadcast.html?bj=streamerA
-   https://도메인/broadcast.html?bj=streamerB
+   https://도메인/broadcast.html?bj=streamerA&goal=300000
+   https://도메인/broadcast.html?bj=streamerB&goal=500000
    ```
 4. 배경이 투명하게 만들어져 있어서, 방송 화면 위에 그대로 겹쳐 보여줄 수 있습니다. 크기/위치는 OBS의 브라우저 소스 크기 조절로 맞추세요.
 5. 화면은 15초 간격으로 자동 새로고침되며, OBS를 껐다 켜도 서버 쪽 캐시(최대 30초) 덕분에 곧바로 최근 값을 보여줍니다.
@@ -118,12 +122,13 @@ soop-challenge-leaderboard/
 SoopScope에는 이미 실제로 진행 중인 도전미션들이 있기 때문에, 실제로 활동 중인 아무 스트리머로도 바로 테스트할 수 있습니다.
 
 1. `https://soopscope.com/challenge` 페이지에서 현재 진행 중(active)인 미션의 스트리머 아이디/닉네임을 하나 확인합니다.
-2. `npm start` 후 `http://localhost:3000/broadcast.html?bj=<확인한 아이디>` 접속 → 진행 중 미션 개수/총 별풍선/TOP5가 뜨는지 확인
+2. `npm start` 후 `http://localhost:3000/broadcast.html?bj=<확인한 아이디>&goal=300000` 접속 → 목표 진행률 카드와 TOP5가 뜨는지 확인
 3. 같은 스트리머를 `?nick=<닉네임>`으로도 접속해서 똑같은 결과가 나오는지 확인
-4. 서로 다른 두 스트리머 주소를 각각 다른 탭으로 열어서, 결과가 섞이지 않고 각자 독립적으로 나오는지 확인
-5. `curl http://localhost:3000/api/mission?bj=<아이디>`를 연속으로 두 번 호출해서, 두 번째 응답의 `"cached":true`와 `updatedAt`이 첫 번째와 같은지 확인 (30초 캐시 동작 확인)
-6. 파라미터 없이 `http://localhost:3000/broadcast.html` 접속 → "스트리머를 지정해주세요" 안내가 뜨는지 확인
-7. 존재하지 않는 아이디로 접속 → "현재 진행 중인 도전미션이 없습니다" 문구가 뜨는지 확인
+4. `goal` 값을 바꿔가며(`goal=1000`처럼 낮게, `goal=abc`처럼 잘못된 값, `goal` 생략) 접속해서 퍼센트/막대/남은 수량이 그에 맞게 바뀌는지, 잘못된 값일 땐 300,000으로 대체되는지 확인
+5. 서로 다른 두 스트리머 주소를 각각 다른 탭으로 열어서, 결과가 섞이지 않고 각자 독립적으로 나오는지 확인
+6. `curl http://localhost:3000/api/mission?bj=<아이디>`를 연속으로 두 번 호출해서, 두 번째 응답의 `"cached":true`와 `updatedAt`이 첫 번째와 같은지 확인 (30초 캐시 동작 확인)
+7. 파라미터 없이 `http://localhost:3000/broadcast.html` 접속 → "스트리머를 지정해주세요" 안내가 뜨는지 확인
+8. 존재하지 않는 아이디로 접속 → "현재 진행 중인 도전미션이 없습니다" 문구가 뜨는지 확인
 
 > 실제로 서로 다른 두 스트리머(`bj=katollia`, `bj=elixxir`)를 동시에 조회해 각자 다른 결과(미션 개수, 총 별풍선, TOP5)가 독립적으로 나오는 것과, 같은 `bj`를 연속 호출했을 때 두 번째 응답이 `cached:true`로 돌아오는 것을 curl로 직접 확인했습니다.
 

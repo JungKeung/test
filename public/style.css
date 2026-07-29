@@ -16,7 +16,7 @@ body {
 .container {
   max-width: 720px;
   margin: 0 auto;
-  padding: 20px 16px 60px;
+  padding: 20px 16px 24px;
 }
 
 /* ---------- 상단 헤더 ---------- */
@@ -34,18 +34,78 @@ body {
   margin: 0;
 }
 
-/* ---------- 진행 중 미션 개수 / 총 별풍선 / 마지막 갱신 시간 ---------- */
-.stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-bottom: 16px;
-  font-size: 14px;
-  color: #555;
+/* ---------- 30만 개 목표 진행률 카드 (반투명 글래스 카드) ---------- */
+/* OBS 배경 위에서도 잘 보이도록, 밝기와 무관하게 대비가 유지되게 어두운 톤 + 블러로 만들었습니다. */
+.progress-card {
+  background: rgba(20, 20, 25, 0.42);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 18px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  color: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
 }
 
-.stats strong {
-  color: #ff6a00;
+.progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+
+.progress-label {
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.progress-percent {
+  font-size: 15px;
+  font-weight: bold;
+  color: #ffd76a;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffb347, #ff6a00);
+  /* 요구사항: 값이 바뀔 때 진행률 바가 부드럽게 늘어나도록 */
+  transition: width 0.6s ease-out;
+}
+
+.progress-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.progress-numbers strong {
+  color: #fff;
+}
+
+/* 목표(30만 개)를 달성하면 초록색 계열로 바뀌고, 문구가 강조됩니다. */
+.progress-card.goal-reached .progress-bar-fill {
+  background: linear-gradient(90deg, #34d399, #10b981);
+}
+
+.progress-card.goal-reached .progress-percent {
+  color: #34d399;
+  font-size: 16px;
 }
 
 /* ---------- 순위 목록 ---------- */

@@ -21,10 +21,20 @@
       <h1 id="missionTitle">🔥 도전미션 별풍선 TOP5</h1>
     </header>
 
-    <section class="stats">
-      <p>진행 중 미션 : <strong id="missionCount">0</strong>개</p>
-      <p>총 별풍선 : <strong id="totalStars">0</strong>개</p>
-      <p>마지막 갱신 : <strong id="updatedAt">-</strong></p>
+    <!-- 30만 개 목표 진행률 카드 (진행 중인 모든 도전미션의 별풍선 총합 기준) -->
+    <section class="progress-card" id="progressCard">
+      <div class="progress-top">
+        <span class="progress-label" id="progressLabel">🎯 목표</span>
+        <span class="progress-percent" id="progressPercent">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progressBarFill"></div>
+      </div>
+      <div class="progress-numbers">
+        <span>현재 <strong id="progressCurrent">0</strong>개</span>
+        <span>목표 <strong id="progressGoal">300,000</strong>개</span>
+        <span>남은 <strong id="progressRemaining">300,000</strong>개</span>
+      </div>
     </section>
 
     <section class="ranking">

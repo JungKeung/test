@@ -189,5 +189,5 @@ app.get('/api/mission', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`서버가 실행되었습니다: http://localhost:${PORT}`);
-  console.log('사용 예: http://localhost:' + PORT + '/broadcast.html?bj=whiteone325');
+  console.log('사용 예: http://localhost:' + PORT + '/broadcast.html?bj=아이디&goal=목표치');
 });
