@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>도전미션 별풍선 TOP5</title>
+  <link rel="stylesheet" href="style.css" />
+  <!--
+    OBS 브라우저 소스 등에 그대로 얹을 수 있도록 배경을 투명하게 만들었습니다.
+    이 화면은 서버(server.js)가 SoopScope에서 조회해둔 결과만 받아서 보여줍니다.
+  -->
+  <style>
+    body {
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 id="missionTitle">🔥 도전미션 별풍선 TOP5</h1>
+    </header>
+
+    <section class="stats">
+      <p>진행 중 미션 : <strong id="missionCount">0</strong>개</p>
+      <p>총 별풍선 : <strong id="totalStars">0</strong>개</p>
+      <p>마지막 갱신 : <strong id="updatedAt">-</strong></p>
+    </section>
+
+    <section class="ranking">
+      <ol id="rankingList" class="ranking-list"></ol>
+      <p id="emptyMessage" class="empty-message" hidden>현재 진행 중인 도전미션이 없습니다.</p>
+    </section>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
