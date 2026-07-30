@@ -78,52 +78,9 @@ body {
   50%      { box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 26px rgba(232, 191, 106, 0.16); }
 }
 
-/* ---------- 상단 헤더 (라벨 + 트로피 아이콘) ---------- */
-/* 방송인 닉네임이 들어가는 타이틀 줄(.hud-title)은 화면에서 굳이 없어도 되어 숨김 처리했습니다. */
-.hud-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.hud-header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.hud-eyebrow {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--c-gold);
-  text-transform: uppercase;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-
+/* missionTitle: app.js가 경고 문구 등을 써 넣는 대상이라 DOM에는 남겨두되 화면에는 표시하지 않습니다. */
 .hud-title {
   display: none;
-}
-
-.hud-icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(160deg, rgba(232, 191, 106, 0.16), rgba(232, 191, 106, 0.02));
-  border: 1px solid rgba(232, 191, 106, 0.3);
-}
-
-.trophy-icon {
-  width: 24px;
-  height: 24px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 
 /* ---------- 목표 진행률 영역 ---------- */
@@ -284,8 +241,13 @@ body {
   color: var(--c-text-muted);
 }
 
+.progress-goal-label {
+  font-weight: 700;
+  color: var(--c-text);
+}
+
 .progress-bottom strong {
-  color: var(--c-gold);
+  color: var(--c-text);
   font-weight: 700;
 }
 
