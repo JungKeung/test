@@ -1,6 +1,6 @@
 // public/app.js
 // broadcast.html에서 쓰는 화면 로직입니다.
-// 주소창의 ?bj=아이디 또는 ?nick=닉네임을 읽어서, 그 스트리머의 도전미션 TOP5만 조회합니다.
+// 주소창의 ?bj=아이디 또는 ?nick=닉네임을 읽어서, 그 스트리머의 도전미션 TOP3만 조회합니다.
 // (여러 스트리머가 각자 다른 주소로 동시에 이 화면을 쓸 수 있습니다)
 // ?goal=목표별풍선개수 로 목표치도 스트리머마다 다르게 지정할 수 있습니다. (없거나 잘못된 값이면 300,000 사용)
 
@@ -82,7 +82,7 @@ function renderProgress(totalStars) {
 
   progressPercentEl.textContent = goalReached
     ? `🎉 ${formatNumber(GOAL_STARS)}개 목표 달성!`
-    : `${percent.toFixed(1)}%`;
+    : `${percent.toFixed(2)}%`;
   progressCardEl.classList.toggle('goal-reached', goalReached);
 }
 
@@ -104,7 +104,7 @@ function renderMission(state) {
 
   const { hasMission, bjNick, totalStars, topRanking } = state;
 
-  missionTitleEl.textContent = `🔥 ${escapeHtml(bjNick || targetBj || targetNick)} 도전미션 별풍선 TOP5`;
+  missionTitleEl.textContent = `🔥 ${escapeHtml(bjNick || targetBj || targetNick)} 도전미션 별풍선 TOP3`;
 
   progressCardEl.hidden = false;
   renderProgress(totalStars);
@@ -119,7 +119,7 @@ function renderMission(state) {
   emptyMessageEl.hidden = true;
   rankingListEl.innerHTML = '';
 
-  topRanking.slice(0, 5).forEach((donor) => {
+  topRanking.slice(0, 3).forEach((donor) => {
     const rank = donor.rank;
     const decoration = RANK_DECORATIONS[rank];
 
@@ -165,3 +165,28 @@ if (!targetBj && !targetNick) {
   fetchMission();
   setInterval(fetchMission, POLL_INTERVAL_MS);
 }
+
+// ---- 숫자가 바뀔 때 살짝 튀어오르는 연출 (디자인 추가 요소, 기존 로직에는 영향 없음) ----
+// progressCurrent/progressGoal/progressPercent/progressRemaining, 순위 카드의 별풍선 개수가
+// 바뀔 때마다 .value-pop 클래스를 잠깐 씌웠다가 애니메이션이 끝나면 벗겨냅니다.
+function watchValuePop(target) {
+  const observer = new MutationObserver(() => {
+    target.classList.remove('value-pop');
+    // 리플로우를 강제로 한 번 일으켜서, 같은 값이 연속으로 들어와도 애니메이션이 재생되게 합니다.
+    void target.offsetWidth;
+    target.classList.add('value-pop');
+  });
+  observer.observe(target, { characterData: true, childList: true, subtree: true });
+}
+
+[progressCurrentEl, progressGoalEl, progressPercentEl, progressRemainingEl].forEach(watchValuePop);
+
+new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    mutation.addedNodes.forEach((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        node.querySelectorAll?.('.rank-count').forEach((el) => watchValuePop(el));
+      }
+    });
+  });
+}).observe(rankingListEl, { childList: true });

@@ -3,44 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>도전미션 별풍선 TOP5</title>
+  <title>도전미션 별풍선 TOP3</title>
   <link rel="stylesheet" href="style.css" />
   <!--
     OBS 브라우저 소스 등에 그대로 얹을 수 있도록 배경을 투명하게 만들었습니다.
     이 화면은 서버(server.js)가 SoopScope에서 조회해둔 결과만 받아서 보여줍니다.
   -->
-  <style>
-    body {
-      background: transparent;
-    }
-  </style>
 </head>
 <body>
   <div class="container">
-    <header class="header">
-      <h1 id="missionTitle">🔥 도전미션 별풍선 TOP5</h1>
-    </header>
+    <div class="hud-panel">
+      <header class="hud-header">
+        <div class="hud-header-left">
+          <span class="hud-eyebrow">Challenge Mission</span>
+          <h1 class="hud-title" id="missionTitle">🔥 도전미션 별풍선 TOP3</h1>
+        </div>
+        <div class="hud-icon" aria-hidden="true">
+          <svg class="trophy-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="trophyGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#fff3d1" />
+                <stop offset="50%" stop-color="#e8bf6a" />
+                <stop offset="100%" stop-color="#a9772c" />
+              </linearGradient>
+            </defs>
+            <path d="M20 8h24v6a12 12 0 0 1-24 0V8z" fill="url(#trophyGold)" />
+            <path d="M20 10h-6a6 6 0 0 0 6 10" stroke="url(#trophyGold)" stroke-width="3" fill="none" stroke-linecap="round" />
+            <path d="M44 10h6a6 6 0 0 1-6 10" stroke="url(#trophyGold)" stroke-width="3" fill="none" stroke-linecap="round" />
+            <rect x="28" y="26" width="8" height="10" fill="url(#trophyGold)" />
+            <path d="M18 42h28l-3 8H21l-3-8z" fill="url(#trophyGold)" />
+            <rect x="16" y="50" width="32" height="5" rx="2" fill="url(#trophyGold)" />
+          </svg>
+        </div>
+      </header>
 
-    <!-- 30만 개 목표 진행률 카드 (진행 중인 모든 도전미션의 별풍선 총합 기준) -->
-    <section class="progress-card" id="progressCard">
-      <div class="progress-top">
-        <span class="progress-label" id="progressLabel">🎯 목표</span>
-        <span class="progress-percent" id="progressPercent">0%</span>
-      </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill" id="progressBarFill"></div>
-      </div>
-      <div class="progress-numbers">
-        <span>현재 <strong id="progressCurrent">0</strong>개</span>
-        <span>목표 <strong id="progressGoal">300,000</strong>개</span>
-        <span>남은 <strong id="progressRemaining">300,000</strong>개</span>
-      </div>
-    </section>
+      <!-- 30만 개 목표 진행률 (진행 중인 모든 도전미션의 별풍선 총합 기준) -->
+      <section class="progress-card" id="progressCard">
+        <div class="progress-top">
+          <div class="progress-stat">
+            <span class="stat-caption">현재</span>
+            <span class="stat-value"><strong id="progressCurrent">0</strong><span class="unit">개</span></span>
+          </div>
+          <div class="progress-stat">
+            <span class="stat-caption">목표</span>
+            <span class="stat-value"><strong id="progressGoal">300,000</strong><span class="unit">개</span></span>
+          </div>
+        </div>
 
-    <section class="ranking">
-      <ol id="rankingList" class="ranking-list"></ol>
-      <p id="emptyMessage" class="empty-message" hidden>현재 진행 중인 도전미션이 없습니다.</p>
-    </section>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressBarFill"></div>
+          <span class="progress-bar-percent" id="progressPercent">0%</span>
+        </div>
+
+        <div class="progress-bottom">
+          <span id="progressLabel">🎯 목표</span>
+          <span>남은 <strong id="progressRemaining">300,000</strong>개</span>
+        </div>
+      </section>
+
+      <section class="ranking">
+        <ol id="rankingList" class="ranking-list"></ol>
+        <p id="emptyMessage" class="empty-message" hidden>현재 진행 중인 도전미션이 없습니다.</p>
+      </section>
+    </div>
   </div>
 
   <script src="app.js" defer></script>
