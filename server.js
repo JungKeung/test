@@ -51,6 +51,16 @@ function isExcludedMission(mission) {
   return EXCLUDED_TITLE_KEYWORDS.some((keyword) => (mission.title || '').includes(keyword));
 }
 
+// 부캐 등 서로 다른 닉네임이지만 같은 사람으로 합쳐서 보여주고 싶을 때 씁니다.
+// key(부캐 닉네임) -> value(화면에 대신 보여줄 닉네임)
+const NICKNAME_ALIASES = {
+  Sol_솔부캐: 'Sol_솔',
+};
+
+function canonicalNickname(nickname) {
+  return NICKNAME_ALIASES[nickname] || nickname;
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { headers: BCRAPING_HEADERS });
   if (!res.ok) {
@@ -111,8 +121,9 @@ async function aggregateDonorsAcrossMissions(bjId, missions) {
   for (const detail of details) {
     if (!detail) continue; // 실패한 미션은 건너뜀
     for (const participant of detail.participants || []) {
-      const accumulated = starsByNickname.get(participant.USER_NAME) || 0;
-      starsByNickname.set(participant.USER_NAME, accumulated + (participant.TOTAL_COUNT || 0));
+      const nickname = canonicalNickname(participant.USER_NAME);
+      const accumulated = starsByNickname.get(nickname) || 0;
+      starsByNickname.set(nickname, accumulated + (participant.TOTAL_COUNT || 0));
     }
   }
 
