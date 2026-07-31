@@ -53,6 +53,76 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// 미션 목록(mission summary 배열)을 받아서, 각 미션의 상세(allDonors)를 병렬로 조회한 뒤
+// 닉네임 기준으로 합산하고 TOP5를 뽑습니다. active 미션 합산과 미확정 미션 합산이
+// 로직이 똑같아서 공용으로 뺐습니다.
+async function aggregateDonorsAcrossMissions(missions) {
+  const details = await Promise.all(
+    missions.map((mission) =>
+      fetchJson(`${SOOPSCOPE_BASE}/api/challenge/${mission.missionKey}`).catch((error) => {
+        console.warn(`미션 ${mission.missionKey} 상세 조회 실패, 이 미션은 건너뜁니다:`, error.message);
+        return null;
+      })
+    )
+  );
+
+  const starsByNickname = new Map();
+  for (const detail of details) {
+    if (!detail) continue; // 실패한 미션은 건너뜀
+    for (const donor of detail.allDonors || []) {
+      const accumulated = starsByNickname.get(donor.nickname) || 0;
+      starsByNickname.set(donor.nickname, accumulated + donor.stars);
+    }
+  }
+
+  const topRanking = Array.from(starsByNickname.entries())
+    .map(([nickname, stars]) => ({ nickname, stars }))
+    .sort((a, b) => b.stars - a.stars)
+    .slice(0, 5)
+    .map((donor, index) => ({ rank: index + 1, ...donor }));
+
+  return topRanking;
+}
+
+// 진행 중(active)인 도전미션이 하나도 없을 때 대신 보여줄, "미확정" 상태인 미션들을 전부 찾아서
+// active 미션 합산과 같은 방식으로 totalStars/후원자를 합산합니다.
+// SoopScope에서 미션은 종료(status: completed)되면 result가 success/fail로 정해지는데,
+// 스트리머가 판정하지 않고 자동 종료(auto_zombie_close 등)된 경우엔 success/fail이 아닌
+// 값이 남고, 사이트에서는 이걸 "미확정"이라고 표시합니다.
+async function fetchUnconfirmedMissions({ bj, nick }) {
+  const searchTerm = bj || nick;
+
+  const listUrl =
+    `${SOOPSCOPE_BASE}/api/challenge?status=completed&sort=recent&limit=50&offset=0` +
+    `&q=${encodeURIComponent(searchTerm)}`;
+  const list = await fetchJson(listUrl);
+
+  const unconfirmedMissions = (list.items || []).filter((item) => {
+    if (item.status !== 'completed') return false;
+    if (item.result === 'success' || item.result === 'fail') return false; // 성공/실패로 판정된 건 제외
+    if (bj) return item.bjId === bj;
+    return item.bjNick === nick;
+  });
+
+  if (unconfirmedMissions.length === 0) {
+    return null;
+  }
+
+  const totalStars = unconfirmedMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
+  const topRanking = await aggregateDonorsAcrossMissions(unconfirmedMissions);
+
+  return {
+    hasMission: true,
+    bjId: unconfirmedMissions[0].bjId,
+    bjNick: unconfirmedMissions[0].bjNick,
+    missionCount: unconfirmedMissions.length,
+    totalStars,
+    topRanking,
+    missionStatus: 'unconfirmed', // active도 성공/실패 확정도 아닌, "미확정" 미션들만 합산했다는 표시입니다.
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 // 특정 스트리머(bj 또는 nick)의 "현재 진행 중인 모든" 도전미션을 찾아서,
 // 각 미션의 전체 후원자(allDonors)를 닉네임 기준으로 합산한 뒤 TOP5를 계산합니다.
 async function fetchMissionData({ bj, nick }) {
@@ -74,6 +144,16 @@ async function fetchMissionData({ bj, nick }) {
   });
 
   if (activeMissions.length === 0) {
+    // 진행 중인 미션이 없으면, "미확정" 상태인 미션들을 전부 합산해서 대신 보여줍니다.
+    const unconfirmed = await fetchUnconfirmedMissions({ bj, nick }).catch((error) => {
+      console.warn(`미확정 미션 대체 조회 실패 (${searchTerm}):`, error.message);
+      return null;
+    });
+
+    if (unconfirmed) {
+      return unconfirmed;
+    }
+
     return {
       hasMission: false,
       bjId: bj || null,
@@ -81,6 +161,7 @@ async function fetchMissionData({ bj, nick }) {
       missionCount: 0,
       totalStars: 0,
       topRanking: [],
+      missionStatus: 'none',
       updatedAt: new Date().toISOString(),
     };
   }
@@ -89,33 +170,8 @@ async function fetchMissionData({ bj, nick }) {
   // "전체 별풍선 총합"만큼은 정확하게 유지하기 위해, 상세 조회 결과와는 별도로 계산합니다.
   const totalStars = activeMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
 
-  // 3) 모든 미션의 상세(allDonors)를 Promise.all로 "병렬" 조회합니다.
-  //    개별 미션 조회가 실패해도 전체가 멈추지 않도록, 실패한 것은 null로 바꿔서 건너뜁니다.
-  const details = await Promise.all(
-    activeMissions.map((mission) =>
-      fetchJson(`${SOOPSCOPE_BASE}/api/challenge/${mission.missionKey}`).catch((error) => {
-        console.warn(`미션 ${mission.missionKey} 상세 조회 실패, 이 미션은 건너뜁니다:`, error.message);
-        return null;
-      })
-    )
-  );
-
-  // 4) 성공한 미션들의 allDonors를 전부 모아서, 같은 nickname끼리 stars를 누적합니다.
-  const starsByNickname = new Map();
-  for (const detail of details) {
-    if (!detail) continue; // 실패한 미션은 건너뜀
-    for (const donor of detail.allDonors || []) {
-      const accumulated = starsByNickname.get(donor.nickname) || 0;
-      starsByNickname.set(donor.nickname, accumulated + donor.stars);
-    }
-  }
-
-  // 5) 합산 결과를 내림차순 정렬해서 TOP5만 남깁니다.
-  const topRanking = Array.from(starsByNickname.entries())
-    .map(([nickname, stars]) => ({ nickname, stars }))
-    .sort((a, b) => b.stars - a.stars)
-    .slice(0, 5)
-    .map((donor, index) => ({ rank: index + 1, ...donor }));
+  // 3) 모든 미션의 상세(allDonors)를 합산해서 TOP5를 계산합니다.
+  const topRanking = await aggregateDonorsAcrossMissions(activeMissions);
 
   return {
     hasMission: true,
@@ -124,6 +180,7 @@ async function fetchMissionData({ bj, nick }) {
     missionCount: activeMissions.length,
     totalStars,
     topRanking,
+    missionStatus: 'active',
     updatedAt: new Date().toISOString(),
   };
 }
