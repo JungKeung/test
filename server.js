@@ -1,5 +1,5 @@
 // server.js
-// SoopScope(비공식 사이트)의 도전미션 API를 조회해서, 요청받은 스트리머(bj 또는 nick)가
+// bcraping.kr(비공식 사이트)의 도전미션 API를 조회해서, 요청받은 스트리머(bj 또는 nick)가
 // "현재 진행 중인" 도전미션과 "미확정"(종료됐지만 성공/실패로 판정되지 않은) 도전미션을
 // 모두 모아, 그 후원자를 닉네임 기준으로 합산한 뒤 TOP5를 돌려주는 서버입니다.
 //
@@ -7,7 +7,7 @@
 // 그 스트리머만 조회합니다. 그래서 broadcast.html?bj=아무개 형태로 누구든 각자 쓸 수 있습니다.
 //
 // SOOP 공식 OAuth/Chat SDK는 전혀 사용하지 않습니다.
-// SoopScope API는 브라우저가 아니라 이 서버(Node.js)에서만 호출합니다.
+// bcraping.kr API는 브라우저가 아니라 이 서버(Node.js)에서만 호출합니다.
 
 require('dotenv').config();
 
@@ -17,15 +17,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 같은 스트리머(bj/nick)를 이 시간(ms) 안에 다시 요청하면, SoopScope를 다시 부르지 않고
+// 같은 스트리머(bj/nick)를 이 시간(ms) 안에 다시 요청하면, bcraping.kr을 다시 부르지 않고
 // 메모리에 저장해둔 결과를 그대로 돌려줍니다. (요구사항 6: 과도한 호출 방지)
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS) || 30000;
 
-const SOOPSCOPE_BASE = 'https://soopscope.com';
+const BCRAPING_BASE = 'https://bcraping.kr';
 
-// SoopScope는 Cookie나 Authorization 없이도 응답하지만, 브라우저처럼 보이는
-// User-Agent가 없으면 403을 돌려줍니다. 그래서 User-Agent만 지정해서 호출합니다.
-const SOOPSCOPE_HEADERS = {
+const BCRAPING_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
   Accept: 'application/json',
@@ -38,7 +36,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const missionCache = new Map();
 
 // 같은 스트리머에 대한 요청이 짧은 시간 안에 동시에 여러 번 들어와도,
-// SoopScope 조회를 중복으로 시작하지 않도록 "진행 중인 조회"를 잠깐 공유합니다.
+// bcraping.kr 조회를 중복으로 시작하지 않도록 "진행 중인 조회"를 잠깐 공유합니다.
 // key -> Promise
 const inFlightFetches = new Map();
 
@@ -49,25 +47,60 @@ function cacheKeyFor({ bj, nick }) {
 // 제목에 이 단어들이 들어간 미션은 스트리머와 상관없이 항상 집계에서 제외합니다.
 const EXCLUDED_TITLE_KEYWORDS = ['도시락'];
 
-function isExcludedMission(item) {
-  return EXCLUDED_TITLE_KEYWORDS.some((keyword) => (item.title || '').includes(keyword));
+function isExcludedMission(mission) {
+  return EXCLUDED_TITLE_KEYWORDS.some((keyword) => (mission.title || '').includes(keyword));
 }
 
 async function fetchJson(url) {
-  const res = await fetch(url, { headers: SOOPSCOPE_HEADERS });
+  const res = await fetch(url, { headers: BCRAPING_HEADERS });
   if (!res.ok) {
-    throw new Error(`SoopScope 응답 오류 (HTTP ${res.status})`);
+    throw new Error(`bcraping.kr 응답 오류 (HTTP ${res.status})`);
   }
-  return res.json();
+  const body = await res.json();
+  if (!body.result) {
+    throw new Error(`bcraping.kr 응답 실패: ${body.message || '알 수 없는 오류'}`);
+  }
+  return body.data;
 }
 
-// 미션 목록(mission summary 배열)을 받아서, 각 미션의 상세(allDonors)를 병렬로 조회한 뒤
+// bj(아이디) 또는 nick(닉네임)으로 정확히 일치하는 스트리머 한 명을 찾습니다.
+// bcraping.kr의 미션 API는 경로에 bjId가 필요해서, nick으로만 요청이 온 경우
+// 이 검색을 통해 먼저 bjId를 알아내야 합니다.
+async function resolveBj({ bj, nick }) {
+  const query = bj || nick;
+  const candidates = await fetchJson(`${BCRAPING_BASE}/api/search/bj?q=${encodeURIComponent(query)}`);
+
+  const match = bj
+    ? candidates.find((candidate) => candidate.BJ_ID === bj)
+    : candidates.find((candidate) => candidate.BJ_NAME === nick || candidate.BJ_DISPLAY_NAME === nick);
+
+  if (!match) {
+    return null;
+  }
+
+  return { bjId: match.BJ_ID, bjNick: match.BJ_NAME };
+}
+
+// bcraping.kr의 미션 목록 응답(raw item)을 서버 내부에서 다루기 쉬운 형태로 바꿉니다.
+function normalizeMission(bjId, bjNick, raw) {
+  return {
+    missionKey: raw.MISSION_KEY,
+    title: raw.TITLE || '',
+    bjId,
+    bjNick,
+    totalStars: raw.FUNDING_SUM || 0,
+    fundingStatus: raw.FUNDING_STATUS, // 'PENDING' | 'SETTLED' | 'EXPIRED' | null
+    outcome: raw.OUTCOME,
+  };
+}
+
+// 미션 목록(mission summary 배열)을 받아서, 각 미션의 후원자 상세를 병렬로 조회한 뒤
 // 닉네임 기준으로 합산하고 TOP5를 뽑습니다. active 미션 합산과 미확정 미션 합산이
 // 로직이 똑같아서 공용으로 뺐습니다.
-async function aggregateDonorsAcrossMissions(missions) {
+async function aggregateDonorsAcrossMissions(bjId, missions) {
   const details = await Promise.all(
     missions.map((mission) =>
-      fetchJson(`${SOOPSCOPE_BASE}/api/challenge/${mission.missionKey}`).catch((error) => {
+      fetchJson(`${BCRAPING_BASE}/api/mission/${bjId}/${mission.missionKey}`).catch((error) => {
         console.warn(`미션 ${mission.missionKey} 상세 조회 실패, 이 미션은 건너뜁니다:`, error.message);
         return null;
       })
@@ -77,9 +110,9 @@ async function aggregateDonorsAcrossMissions(missions) {
   const starsByNickname = new Map();
   for (const detail of details) {
     if (!detail) continue; // 실패한 미션은 건너뜀
-    for (const donor of detail.allDonors || []) {
-      const accumulated = starsByNickname.get(donor.nickname) || 0;
-      starsByNickname.set(donor.nickname, accumulated + donor.stars);
+    for (const participant of detail.participants || []) {
+      const accumulated = starsByNickname.get(participant.USER_NAME) || 0;
+      starsByNickname.set(participant.USER_NAME, accumulated + (participant.TOTAL_COUNT || 0));
     }
   }
 
@@ -92,64 +125,26 @@ async function aggregateDonorsAcrossMissions(missions) {
   return topRanking;
 }
 
-// 진행 중(active)인 미션 목록만 가져옵니다.
-async function fetchActiveMissionList({ bj, nick }) {
-  const searchTerm = bj || nick;
-
-  // SoopScope의 검색(q)은 닉네임과 아이디 둘 다 찾아줍니다.
-  const listUrl =
-    `${SOOPSCOPE_BASE}/api/challenge?status=active&sort=recent&limit=50&offset=0` +
-    `&q=${encodeURIComponent(searchTerm)}`;
-  const list = await fetchJson(listUrl);
-
-  // bj가 주어졌으면 bjId가 정확히 일치하는 것만, nick이 주어졌으면 bjNick이 정확히 일치하는 것만 남깁니다.
-  // 주의: 여기서 1개만 고르지 않고, 조건에 맞는 active 미션을 전부 사용합니다.
-  return (list.items || []).filter((item) => {
-    if (item.status !== 'active') return false;
-    if (isExcludedMission(item)) return false;
-    if (bj) return item.bjId === bj;
-    return item.bjNick === nick;
-  });
+// 진행 중(active)인 미션 목록만 가져옵니다. bcraping.kr에서는 FUNDING_STATUS가
+// 'PENDING'인 미션이 아직 모금이 진행 중인(=진행 중) 미션입니다.
+function pickActiveMissions(missions) {
+  return missions.filter((mission) => mission.fundingStatus === 'PENDING' && !isExcludedMission(mission));
 }
 
-// "미확정" 상태인 미션 목록만 가져옵니다.
-// SoopScope에서 미션은 종료(status: completed)되면 result가 success/fail로 정해지는데,
-// 스트리머가 판정하지 않고 자동 종료(auto_zombie_close 등)된 경우엔 success/fail이 아닌
-// 값이 남고, 사이트에서는 이걸 "미확정"이라고 표시합니다.
-async function fetchUnconfirmedMissionList({ bj, nick }) {
-  const searchTerm = bj || nick;
-
-  const listUrl =
-    `${SOOPSCOPE_BASE}/api/challenge?status=completed&sort=recent&limit=50&offset=0` +
-    `&q=${encodeURIComponent(searchTerm)}`;
-  const list = await fetchJson(listUrl);
-
-  return (list.items || []).filter((item) => {
-    if (item.status !== 'completed') return false;
-    if (item.result === 'success' || item.result === 'fail') return false; // 성공/실패로 판정된 건 제외
-    if (isExcludedMission(item)) return false;
-    if (bj) return item.bjId === bj;
-    return item.bjNick === nick;
-  });
+// "미확정" 상태인 미션 목록만 가져옵니다. bcraping.kr에서는 모금 기간이 끝났는데도
+// 스트리머가 성공/실패를 판정하지 않고 그대로 만료된 미션이 FUNDING_STATUS: 'EXPIRED'로
+// 남는데, 사이트에서는 이걸 성공/실패 확정과 구분해서 다룹니다.
+function pickUnconfirmedMissions(missions) {
+  return missions.filter((mission) => mission.fundingStatus === 'EXPIRED' && !isExcludedMission(mission));
 }
 
 // 특정 스트리머(bj 또는 nick)의 "진행 중인" 미션과 "미확정" 미션을 항상 같이 가져와서,
-// 둘을 합친 전체 후원자(allDonors)를 닉네임 기준으로 합산한 뒤 TOP5를 계산합니다.
+// 둘을 합친 전체 후원자를 닉네임 기준으로 합산한 뒤 TOP5를 계산합니다.
 // (진행 중인 미션이 있어도 미확정 미션을 무시하지 않고 항상 같이 더합니다.)
 async function fetchMissionData({ bj, nick }) {
-  const searchTerm = bj || nick;
+  const resolved = await resolveBj({ bj, nick });
 
-  const [activeMissions, unconfirmedMissions] = await Promise.all([
-    fetchActiveMissionList({ bj, nick }),
-    fetchUnconfirmedMissionList({ bj, nick }).catch((error) => {
-      console.warn(`미확정 미션 조회 실패 (${searchTerm}), 미확정 없이 진행합니다:`, error.message);
-      return [];
-    }),
-  ]);
-
-  const allMissions = [...activeMissions, ...unconfirmedMissions];
-
-  if (allMissions.length === 0) {
+  if (!resolved) {
     return {
       hasMission: false,
       bjId: bj || null,
@@ -162,10 +157,36 @@ async function fetchMissionData({ bj, nick }) {
     };
   }
 
+  const { bjId, bjNick } = resolved;
+
+  // bcraping.kr은 CHALLENGE(도전미션)와 BATTLE(대결미션)을 같은 목록으로 섞어서 주기 때문에,
+  // 대결미션과 알 수 없는(MISSION_TYPE: 'UNKNOWN') 항목은 걸러내고 도전미션만 사용합니다.
+  const missionList = await fetchJson(`${BCRAPING_BASE}/api/mission/${bjId}`);
+  const challengeMissions = (missionList.contents || [])
+    .filter((raw) => raw.MISSION_TYPE === 'CHALLENGE')
+    .map((raw) => normalizeMission(bjId, bjNick, raw));
+
+  const activeMissions = pickActiveMissions(challengeMissions);
+  const unconfirmedMissions = pickUnconfirmedMissions(challengeMissions);
+  const allMissions = [...activeMissions, ...unconfirmedMissions];
+
+  if (allMissions.length === 0) {
+    return {
+      hasMission: false,
+      bjId,
+      bjNick,
+      missionCount: 0,
+      totalStars: 0,
+      topRanking: [],
+      missionStatus: 'none',
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   // 미션 목록 자체에 들어있는 totalStars를 더합니다. 아래 상세 조회가 일부 실패하더라도
   // "전체 별풍선 총합"만큼은 정확하게 유지하기 위해, 상세 조회 결과와는 별도로 계산합니다.
   const totalStars = allMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
-  const topRanking = await aggregateDonorsAcrossMissions(allMissions);
+  const topRanking = await aggregateDonorsAcrossMissions(bjId, allMissions);
 
   const missionStatus =
     activeMissions.length > 0 && unconfirmedMissions.length > 0
@@ -176,8 +197,8 @@ async function fetchMissionData({ bj, nick }) {
 
   return {
     hasMission: true,
-    bjId: allMissions[0].bjId,
-    bjNick: allMissions[0].bjNick,
+    bjId,
+    bjNick,
     missionCount: allMissions.length,
     activeMissionCount: activeMissions.length,
     unconfirmedMissionCount: unconfirmedMissions.length,
@@ -242,8 +263,8 @@ app.get('/api/mission', async (req, res) => {
     const data = await getMissionDataCached({ bj, nick });
     res.json(data);
   } catch (error) {
-    console.error(`SoopScope 조회 실패 (${bj ? `bj=${bj}` : `nick=${nick}`}):`, error.message);
-    res.status(502).json({ error: `SoopScope 조회에 실패했습니다: ${error.message}` });
+    console.error(`bcraping.kr 조회 실패 (${bj ? `bj=${bj}` : `nick=${nick}`}):`, error.message);
+    res.status(502).json({ error: `bcraping.kr 조회에 실패했습니다: ${error.message}` });
   }
 });
 
