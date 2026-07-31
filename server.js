@@ -1,6 +1,7 @@
 // server.js
 // SoopScope(비공식 사이트)의 도전미션 API를 조회해서, 요청받은 스트리머(bj 또는 nick)가
-// "현재 진행 중인 모든" 도전미션의 후원자를 닉네임 기준으로 합산한 뒤 TOP5를 돌려주는 서버입니다.
+// "현재 진행 중인" 도전미션과 "미확정"(종료됐지만 성공/실패로 판정되지 않은) 도전미션을
+// 모두 모아, 그 후원자를 닉네임 기준으로 합산한 뒤 TOP5를 돌려주는 서버입니다.
 //
 // 특정 스트리머 하나로 고정되어 있지 않고, 요청마다 ?bj=아이디 또는 ?nick=닉네임을 받아서
 // 그 스트리머만 조회합니다. 그래서 broadcast.html?bj=아무개 형태로 누구든 각자 쓸 수 있습니다.
@@ -45,6 +46,13 @@ function cacheKeyFor({ bj, nick }) {
   return bj ? `bj:${bj}` : `nick:${nick}`;
 }
 
+// 제목에 이 단어들이 들어간 미션은 스트리머와 상관없이 항상 집계에서 제외합니다.
+const EXCLUDED_TITLE_KEYWORDS = ['도시락'];
+
+function isExcludedMission(item) {
+  return EXCLUDED_TITLE_KEYWORDS.some((keyword) => (item.title || '').includes(keyword));
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { headers: SOOPSCOPE_HEADERS });
   if (!res.ok) {
@@ -84,12 +92,31 @@ async function aggregateDonorsAcrossMissions(missions) {
   return topRanking;
 }
 
-// 진행 중(active)인 도전미션이 하나도 없을 때 대신 보여줄, "미확정" 상태인 미션들을 전부 찾아서
-// active 미션 합산과 같은 방식으로 totalStars/후원자를 합산합니다.
+// 진행 중(active)인 미션 목록만 가져옵니다.
+async function fetchActiveMissionList({ bj, nick }) {
+  const searchTerm = bj || nick;
+
+  // SoopScope의 검색(q)은 닉네임과 아이디 둘 다 찾아줍니다.
+  const listUrl =
+    `${SOOPSCOPE_BASE}/api/challenge?status=active&sort=recent&limit=50&offset=0` +
+    `&q=${encodeURIComponent(searchTerm)}`;
+  const list = await fetchJson(listUrl);
+
+  // bj가 주어졌으면 bjId가 정확히 일치하는 것만, nick이 주어졌으면 bjNick이 정확히 일치하는 것만 남깁니다.
+  // 주의: 여기서 1개만 고르지 않고, 조건에 맞는 active 미션을 전부 사용합니다.
+  return (list.items || []).filter((item) => {
+    if (item.status !== 'active') return false;
+    if (isExcludedMission(item)) return false;
+    if (bj) return item.bjId === bj;
+    return item.bjNick === nick;
+  });
+}
+
+// "미확정" 상태인 미션 목록만 가져옵니다.
 // SoopScope에서 미션은 종료(status: completed)되면 result가 success/fail로 정해지는데,
 // 스트리머가 판정하지 않고 자동 종료(auto_zombie_close 등)된 경우엔 success/fail이 아닌
 // 값이 남고, 사이트에서는 이걸 "미확정"이라고 표시합니다.
-async function fetchUnconfirmedMissions({ bj, nick }) {
+async function fetchUnconfirmedMissionList({ bj, nick }) {
   const searchTerm = bj || nick;
 
   const listUrl =
@@ -97,63 +124,32 @@ async function fetchUnconfirmedMissions({ bj, nick }) {
     `&q=${encodeURIComponent(searchTerm)}`;
   const list = await fetchJson(listUrl);
 
-  const unconfirmedMissions = (list.items || []).filter((item) => {
+  return (list.items || []).filter((item) => {
     if (item.status !== 'completed') return false;
     if (item.result === 'success' || item.result === 'fail') return false; // 성공/실패로 판정된 건 제외
+    if (isExcludedMission(item)) return false;
     if (bj) return item.bjId === bj;
     return item.bjNick === nick;
   });
-
-  if (unconfirmedMissions.length === 0) {
-    return null;
-  }
-
-  const totalStars = unconfirmedMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
-  const topRanking = await aggregateDonorsAcrossMissions(unconfirmedMissions);
-
-  return {
-    hasMission: true,
-    bjId: unconfirmedMissions[0].bjId,
-    bjNick: unconfirmedMissions[0].bjNick,
-    missionCount: unconfirmedMissions.length,
-    totalStars,
-    topRanking,
-    missionStatus: 'unconfirmed', // active도 성공/실패 확정도 아닌, "미확정" 미션들만 합산했다는 표시입니다.
-    updatedAt: new Date().toISOString(),
-  };
 }
 
-// 특정 스트리머(bj 또는 nick)의 "현재 진행 중인 모든" 도전미션을 찾아서,
-// 각 미션의 전체 후원자(allDonors)를 닉네임 기준으로 합산한 뒤 TOP5를 계산합니다.
+// 특정 스트리머(bj 또는 nick)의 "진행 중인" 미션과 "미확정" 미션을 항상 같이 가져와서,
+// 둘을 합친 전체 후원자(allDonors)를 닉네임 기준으로 합산한 뒤 TOP5를 계산합니다.
+// (진행 중인 미션이 있어도 미확정 미션을 무시하지 않고 항상 같이 더합니다.)
 async function fetchMissionData({ bj, nick }) {
   const searchTerm = bj || nick;
 
-  // 1) bj(아이디) 또는 nick(닉네임)으로 검색해서 진행 중(active)인 미션 목록을 가져옵니다.
-  //    SoopScope의 검색(q)은 닉네임과 아이디 둘 다 찾아줍니다.
-  const listUrl =
-    `${SOOPSCOPE_BASE}/api/challenge?status=active&sort=recent&limit=50&offset=0` +
-    `&q=${encodeURIComponent(searchTerm)}`;
-  const list = await fetchJson(listUrl);
+  const [activeMissions, unconfirmedMissions] = await Promise.all([
+    fetchActiveMissionList({ bj, nick }),
+    fetchUnconfirmedMissionList({ bj, nick }).catch((error) => {
+      console.warn(`미확정 미션 조회 실패 (${searchTerm}), 미확정 없이 진행합니다:`, error.message);
+      return [];
+    }),
+  ]);
 
-  // 2) bj가 주어졌으면 bjId가 정확히 일치하는 것만, nick이 주어졌으면 bjNick이 정확히 일치하는 것만 남깁니다.
-  //    주의: 여기서 1개만 고르지 않고, 조건에 맞는 active 미션을 전부 사용합니다.
-  const activeMissions = (list.items || []).filter((item) => {
-    if (item.status !== 'active') return false;
-    if (bj) return item.bjId === bj;
-    return item.bjNick === nick;
-  });
+  const allMissions = [...activeMissions, ...unconfirmedMissions];
 
-  if (activeMissions.length === 0) {
-    // 진행 중인 미션이 없으면, "미확정" 상태인 미션들을 전부 합산해서 대신 보여줍니다.
-    const unconfirmed = await fetchUnconfirmedMissions({ bj, nick }).catch((error) => {
-      console.warn(`미확정 미션 대체 조회 실패 (${searchTerm}):`, error.message);
-      return null;
-    });
-
-    if (unconfirmed) {
-      return unconfirmed;
-    }
-
+  if (allMissions.length === 0) {
     return {
       hasMission: false,
       bjId: bj || null,
@@ -168,19 +164,26 @@ async function fetchMissionData({ bj, nick }) {
 
   // 미션 목록 자체에 들어있는 totalStars를 더합니다. 아래 상세 조회가 일부 실패하더라도
   // "전체 별풍선 총합"만큼은 정확하게 유지하기 위해, 상세 조회 결과와는 별도로 계산합니다.
-  const totalStars = activeMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
+  const totalStars = allMissions.reduce((sum, mission) => sum + (mission.totalStars || 0), 0);
+  const topRanking = await aggregateDonorsAcrossMissions(allMissions);
 
-  // 3) 모든 미션의 상세(allDonors)를 합산해서 TOP5를 계산합니다.
-  const topRanking = await aggregateDonorsAcrossMissions(activeMissions);
+  const missionStatus =
+    activeMissions.length > 0 && unconfirmedMissions.length > 0
+      ? 'active+unconfirmed'
+      : activeMissions.length > 0
+      ? 'active'
+      : 'unconfirmed';
 
   return {
     hasMission: true,
-    bjId: activeMissions[0].bjId,
-    bjNick: activeMissions[0].bjNick,
-    missionCount: activeMissions.length,
+    bjId: allMissions[0].bjId,
+    bjNick: allMissions[0].bjNick,
+    missionCount: allMissions.length,
+    activeMissionCount: activeMissions.length,
+    unconfirmedMissionCount: unconfirmedMissions.length,
     totalStars,
     topRanking,
-    missionStatus: 'active',
+    missionStatus,
     updatedAt: new Date().toISOString(),
   };
 }
