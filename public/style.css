@@ -1,5 +1,5 @@
 /* style.css
-   OBS 브라우저 소스용 "도전미션 별풍선 TOP3" 오버레이 디자인입니다.
+   OBS 브라우저 소스용 "도전미션 별풍선 TOP5" 오버레이 디자인입니다.
    블랙 + 골드 테마의 글래스모피즘 HUD 스타일로 구성했으며,
    1920x1080 방송 화면 기준 고정 크기로 제작되어 반응형 처리는 하지 않습니다. */
 
@@ -262,7 +262,7 @@ body {
   100% { transform: scale(1); }
 }
 
-/* ---------- TOP3 순위 카드 (세로 목록) ---------- */
+/* ---------- TOP5 순위 카드 (세로 목록) ---------- */
 .ranking-list {
   list-style: none;
   margin: 0;
@@ -286,6 +286,8 @@ body {
 
 .rank-item:nth-child(2) { animation-delay: 0.06s; }
 .rank-item:nth-child(3) { animation-delay: 0.12s; }
+.rank-item:nth-child(4) { animation-delay: 0.18s; }
+.rank-item:nth-child(5) { animation-delay: 0.24s; }
 
 @keyframes cardFadeIn {
   from { opacity: 0; transform: translateY(14px); }
@@ -303,6 +305,8 @@ body {
   font-size: 13px;
   font-weight: 800;
   color: #1a1408;
+  /* 4~5위처럼 메달 색상(금/은/동)이 없는 순위의 기본 배지 배경입니다. */
+  background: rgba(226, 228, 232, 0.85);
 }
 
 .rank-nickname {

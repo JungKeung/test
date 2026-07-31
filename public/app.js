@@ -1,6 +1,6 @@
 // public/app.js
 // broadcast.html에서 쓰는 화면 로직입니다.
-// 주소창의 ?bj=아이디 또는 ?nick=닉네임을 읽어서, 그 스트리머의 도전미션 TOP3만 조회합니다.
+// 주소창의 ?bj=아이디 또는 ?nick=닉네임을 읽어서, 그 스트리머의 도전미션 TOP5만 조회합니다.
 // (여러 스트리머가 각자 다른 주소로 동시에 이 화면을 쓸 수 있습니다)
 // ?goal=목표별풍선개수 로 목표치도 스트리머마다 다르게 지정할 수 있습니다. (없거나 잘못된 값이면 300,000 사용)
 
@@ -104,7 +104,7 @@ function renderMission(state) {
 
   const { hasMission, bjNick, totalStars, topRanking } = state;
 
-  missionTitleEl.textContent = `🔥 ${escapeHtml(bjNick || targetBj || targetNick)} 도전미션 별풍선 TOP3`;
+  missionTitleEl.textContent = `🔥 ${escapeHtml(bjNick || targetBj || targetNick)} 도전미션 별풍선 TOP5`;
 
   progressCardEl.hidden = false;
   renderProgress(totalStars);
@@ -119,7 +119,7 @@ function renderMission(state) {
   emptyMessageEl.hidden = true;
   rankingListEl.innerHTML = '';
 
-  topRanking.slice(0, 3).forEach((donor) => {
+  topRanking.slice(0, 5).forEach((donor) => {
     const rank = donor.rank;
     const decoration = RANK_DECORATIONS[rank];
 
